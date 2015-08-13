@@ -1,5 +1,7 @@
 package org.byako.group_tracker;
 
+import org.byako.R;
+
 import android.app.Activity;
 import android.os.Bundle;
 import android.view.Menu;
@@ -35,10 +37,10 @@ public class MainActivity extends Activity {
 	}
 	
 	public void onStartButtonClicked(View v) {
-		((TextView)findViewById(R.id.startButtonId)).setText("Started");
+		((TextView)findViewById(R.id.statusViewId)).setText("Started");
 	}
 
 	public void onStopButtonClicked(View v) {
-		((TextView)findViewById(R.id.startButtonId)).setText("Stopped");
+		((TextView)findViewById(R.id.statusViewId)).setText("Stopped");
 	}
 }
