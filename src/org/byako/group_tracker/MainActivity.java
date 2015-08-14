@@ -3,18 +3,33 @@ package org.byako.group_tracker;
 import org.byako.R;
 
 import android.app.Activity;
+import android.location.Location;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
 import android.view.View;
 
-public class MainActivity extends Activity {
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationServices;
+
+public class MainActivity extends Activity implements
+		GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+
+	private GoogleApiClient mGoogleApiClient;
+	private Location mLastLocation;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+
+		mGoogleApiClient = new GoogleApiClient.Builder(this)
+				.addConnectionCallbacks(this)
+				.addOnConnectionFailedListener(this)
+				.addApi(LocationServices.API)
+				.build();
 	}
 
 	@Override
@@ -35,12 +50,37 @@ public class MainActivity extends Activity {
 		}
 		return super.onOptionsItemSelected(item);
 	}
-	
+
+	@Override
+	public void onConnected(Bundle connectionHint) {
+		mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+		if (mLastLocation != null) {
+			setStatusText(String.valueOf(mLastLocation.getLatitude()) + ":" + String.valueOf(mLastLocation.getLongitude()));
+		} else {
+			setStatusText("ERROR getting last location");
+		}
+	}
+
+	@Override
+	public void onConnectionSuspended(int reason) {
+		setStatusText("connection suspended");
+	}
+	@Override
+	public void onConnectionFailed(ConnectionResult result) {
+		setStatusText("connection failed");
+	}
+
+	private void setStatusText(String newLabel) {
+		((TextView)findViewById(R.id.statusViewId)).setText(newLabel);
+	}
+
 	public void onStartButtonClicked(View v) {
-		((TextView)findViewById(R.id.statusViewId)).setText("Started");
+		//((TextView)findViewById(R.id.statusViewId)).setText("Started");
+		mGoogleApiClient.connect();
 	}
 
 	public void onStopButtonClicked(View v) {
-		((TextView)findViewById(R.id.statusViewId)).setText("Stopped");
+		//((TextView)findViewById(R.id.statusViewId)).setText("Stopped");
+		mGoogleApiClient.disconnect();
 	}
 }
