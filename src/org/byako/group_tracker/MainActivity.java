@@ -1,10 +1,20 @@
 package org.byako.group_tracker;
 
-import org.byako.R;
+import org.byako.group_tracker.R;
 
 import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
+import android.os.RemoteException;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.EditText;
@@ -19,26 +29,51 @@ import com.google.android.gms.location.LocationListener;
 import java.text.DateFormat;
 import java.util.Date;
 
-public class MainActivity extends Activity implements
-		GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, LocationListener {
+public class MainActivity extends Activity {
 
-	private GoogleApiClient mGoogleApiClient;
-	private Location mLastLocation;
-	private boolean isStarted;
 	private String attendeeName;
 	private String eventName;
-	private Location mCurrentLocation;
+	private Boolean isStarted;
+	private Boolean isDebug = true;
+
+	/* IPC related stuff, to talk to service polling GPS */
+	Messenger tsService = null;
+	final Messenger tsMessenger = new Messenger (new IncomingHandler());
+	private boolean isBound = false;
+
+	private ServiceConnection tsConnection = new ServiceConnection() {
+		@Override
+		public void onServiceConnected(ComponentName className, IBinder service) {
+			Log.i("MainActivity", "Service connected");
+			tsService = new Messenger(service);
+			isBound = true;
+			try {
+				Message msg = Message.obtain(null, TrackerService.MSG_REGISTER_CLIENT_COMMAND);
+				msg.replyTo = tsMessenger;
+				tsService.send(msg);
+			} catch (RemoteException e) {
+				Log.i("MainActivity", "Exception: " + e);
+			}
+		}
+		@Override
+		public void onServiceDisconnected(ComponentName className) {
+			Log.i("MainACtivity", "Service disconnected");
+			isBound = false;
+		}
+	};
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+	}
 
-		mGoogleApiClient = new GoogleApiClient.Builder(this)
-				.addConnectionCallbacks(this)
-				.addOnConnectionFailedListener(this)
-				.addApi(LocationServices.API)
-				.build();
+	@Override
+	public void onStart() {
+		super.onStart();
+		if (!isBound) {
+			bindService(new Intent(this, TrackerService.class), tsConnection, Context.BIND_AUTO_CREATE);
+		}
 	}
 
 	@Override
@@ -60,32 +95,6 @@ public class MainActivity extends Activity implements
 		return super.onOptionsItemSelected(item);
 	}
 
-	@Override
-	public void onConnected(Bundle connectionHint) {
-//		mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-		LocationRequest mLocationRequest = new LocationRequest();
-		mLocationRequest.setInterval(10000);
-		mLocationRequest.setFastestInterval(5000);
-		mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-
-		LocationServices.FusedLocationApi.requestLocationUpdates(
-				mGoogleApiClient, mLocationRequest, this);
-		setLocationText("Updating location...");
-/*		if (mLastLocation != null) {
-			setLocationText(String.valueOf(mLastLocation.getLatitude()) + ":" + String.valueOf(mLastLocation.getLongitude()));
-		} else {
-			setStatusText("ERROR getting last location");
-		}*/
-	}
-
-	@Override
-	public void onConnectionSuspended(int reason) {
-		setStatusText("connection suspended");
-	}
-	@Override
-	public void onConnectionFailed(ConnectionResult result) {
-		setStatusText("connection failed");
-	}
 
 	private void setStatusText(String newLabel) {
 		((TextView)findViewById(R.id.statusViewId)).setText(newLabel);
@@ -97,48 +106,89 @@ public class MainActivity extends Activity implements
 	public void onStartStopButtonClicked(View v) {
 		//((TextView)findViewById(R.id.statusViewId)).setText("Started");
 		if (!isStarted) {
-			mGoogleApiClient.connect();
-			attendeeName = findViewById(R.id.attendeeName).toString();
-			findViewById(R.id.attendeeName).setEnabled(false);
-			eventName = findViewById(R.id.eventName).toString();
-			findViewById(R.id.eventName).setEnabled(false);
+			// TODO: send message to serevice to start polling
 
-			isStarted = true;
-			setStatusText("Started");
+			attendeeName = findViewById(R.id.attendeeName).toString();
+			eventName = findViewById(R.id.eventName).toString();
+
+			findViewById(R.id.attendeeName).setEnabled(false);
+			findViewById(R.id.eventName).setEnabled(false);
+			// TODO: move status change to handler
+			startService(new Intent(this, TrackerService.class));
 		} else {
-			if (mGoogleApiClient.isConnected()) {
-				LocationServices.FusedLocationApi.removeLocationUpdates(
-						mGoogleApiClient, this);
-				mGoogleApiClient.disconnect();
-			}
+			// TODO: send message to service to stop polling
 			findViewById(R.id.attendeeName).setEnabled(true);
 			findViewById(R.id.eventName).setEnabled(true);
-			isStarted = false;
-			setStatusText("Stopped");
+
+			// TODO: move status change to handler
+			if (!isStarted)
+				maLog("STOPPING NON-RUNNIGN SERVICE");
+			stopService(new Intent(this, TrackerService.class));
 		}
 	}
 
-	@Override
-	public void onLocationChanged(Location location) {
-		mCurrentLocation = location;
-//		mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
-		setLocationText(location.getLatitude() + " : " + location.getLongitude());
-	}
 
 	@Override
 	protected void onPause() {
 		super.onPause();
-		if (mGoogleApiClient.isConnected()) {
-			LocationServices.FusedLocationApi.removeLocationUpdates(
-					mGoogleApiClient, this);
-		}
 	}
 
 	@Override
 	public void onResume() {
 		super.onResume();
-//		if (mGoogleApiClient.isConnected() && isStarted) {
-//			startLocationUpdates();
-//		}
+	}
+
+	@Override
+	public void onStop() {
+		if (isBound) {
+			if (tsService != null) {
+				try {
+					Message msg = Message.obtain(null, TrackerService.MSG_UNREGISTER_CLIENT_COMMAND);
+					tsService.send(msg);
+				} catch (RemoteException e) {
+					Log.i("MainActivity", "Could not send unbind message in onStop");
+				}
+			}
+			unbindService(tsConnection);
+			isBound = false;
+		}
+		super.onStop();
+	}
+
+	class IncomingHandler extends Handler {
+		@Override
+		public void handleMessage(Message msg) {
+			switch(msg.what) {
+				case TrackerService.MSG_LOCATION_UPDATE_RECEIVED:
+				 	//	setLocationText(location.getLatitude() + " : " + location.getLongitude());
+					break;
+				case TrackerService.MSG_SERVICE_STATUS_RESPONSE:
+					if (msg.arg1 == 1 ? true : false) {
+							isStarted = true;
+							setStatusText("Started");
+					} else {
+							isStarted = false;
+							setStatusText("Stopped");
+					}
+					break;
+				case TrackerService.MSG_REGISTER_CLIENT_RESPONSE:
+					Log.i("MainActivityHandler", "service client registered, requesting service status");
+					Message rmsg = Message.obtain(null, TrackerService.MSG_SERVICE_STATUS_REQUEST);
+					try {
+						tsService.send(rmsg);
+					} catch (RemoteException e) {
+						Log.i("MainActivityHandler", "Could not send message to tracker service");
+					}
+					break;
+				default:
+					Log.i("MainActivityHandler", "Unknown message received:" + msg.what);
+			}
+		}
+	}
+
+	private void maLog(String s) {
+		if (isDebug) {
+			Log.i("MainActivity", s);
+		}
 	}
 }
