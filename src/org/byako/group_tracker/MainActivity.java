@@ -34,7 +34,7 @@ public class MainActivity extends Activity {
 	private String attendeeName;
 	private String eventName;
 	private Boolean isStarted;
-	private Boolean isDebug = true;
+	private Boolean isDebug = false;
 
 	/* IPC related stuff, to talk to service polling GPS */
 	Messenger tsService = null;
@@ -124,6 +124,11 @@ public class MainActivity extends Activity {
 			if (!isStarted)
 				maLog("STOPPING NON-RUNNIGN SERVICE");
 			stopService(new Intent(this, TrackerService.class));
+			try {
+				tsService.send(Message.obtain(null, TrackerService.MSG_STOP_GPS_POLLING, 0, 0));
+			} catch (RemoteException e) {
+				maLog("Failed to send MSG_STOP_GPS_POLLING message:" + e);
+			}
 		}
 	}
 
@@ -160,11 +165,18 @@ public class MainActivity extends Activity {
 		public void handleMessage(Message msg) {
 			switch(msg.what) {
 				case TrackerService.MSG_LOCATION_UPDATE_RECEIVED:
-				 	//	setLocationText(location.getLatitude() + " : " + location.getLongitude());
+					Log.i("MainActivityHandler", "Location Update received");
+					String newLoc = new String();
+					newLoc += "lt:" + msg.getData().getDouble("latitude");
+					newLoc += "; / ";
+					newLoc += "lg:" + msg.getData().getDouble("longitude");
+				 	setLocationText(newLoc);
 					break;
 				case TrackerService.MSG_SERVICE_STATUS_RESPONSE:
 					if (msg.arg1 == 1 ? true : false) {
 							isStarted = true;
+							findViewById(R.id.attendeeName).setEnabled(false);
+							findViewById(R.id.eventName).setEnabled(false);
 							setStatusText("Started");
 					} else {
 							isStarted = false;
