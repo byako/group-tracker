@@ -31,8 +31,8 @@ import java.util.Date;
 
 public class MainActivity extends Activity {
 
-	private String attendeeName;
-	private String eventName;
+	private String attendeeName = "anonymous";
+	private String eventName = "efar15";
 	private Boolean isStarted;
 	private Boolean isDebug = false;
 
@@ -108,27 +108,37 @@ public class MainActivity extends Activity {
 		if (!isStarted) {
 			// TODO: send message to serevice to start polling
 
-			attendeeName = findViewById(R.id.attendeeName).toString();
-			eventName = findViewById(R.id.eventName).toString();
+			attendeeName = ((EditText)findViewById(R.id.attendeeName)).getText().toString();
+			eventName = ((EditText)findViewById(R.id.eventName)).getText().toString();
 
 			findViewById(R.id.attendeeName).setEnabled(false);
 			findViewById(R.id.eventName).setEnabled(false);
-			// TODO: move status change to handler
+
+			Bundle data = new Bundle();
+			data.putString("attendeeName", attendeeName);
+			data.putString("eventName", eventName);
+			Message msg = Message.obtain(null, TrackerService.MSG_SET_DATA);
+			msg.setData(data);
+			try {
+				tsService.send(msg);
+			} catch (Exception e) {
+				maLog("Failed to send MSG_SET_DATA message:" + e);
+			}
 			startService(new Intent(this, TrackerService.class));
 		} else {
 			// TODO: send message to service to stop polling
-			findViewById(R.id.attendeeName).setEnabled(true);
-			findViewById(R.id.eventName).setEnabled(true);
+//			findViewById(R.id.attendeeName).setEnabled(true);
+//			findViewById(R.id.eventName).setEnabled(true);
 
 			// TODO: move status change to handler
 			if (!isStarted)
 				maLog("STOPPING NON-RUNNIGN SERVICE");
-			stopService(new Intent(this, TrackerService.class));
 			try {
 				tsService.send(Message.obtain(null, TrackerService.MSG_STOP_GPS_POLLING, 0, 0));
 			} catch (RemoteException e) {
 				maLog("Failed to send MSG_STOP_GPS_POLLING message:" + e);
 			}
+			stopService(new Intent(this, TrackerService.class));
 		}
 	}
 
@@ -173,14 +183,28 @@ public class MainActivity extends Activity {
 				 	setLocationText(newLoc);
 					break;
 				case TrackerService.MSG_SERVICE_STATUS_RESPONSE:
-					if (msg.arg1 == 1 ? true : false) {
-							isStarted = true;
-							findViewById(R.id.attendeeName).setEnabled(false);
-							findViewById(R.id.eventName).setEnabled(false);
-							setStatusText("Started");
+					if (msg.arg1 == 1) {
+						isStarted = true;
+						if (msg.getData().containsKey("attendeeName")) {
+							((EditText) findViewById(R.id.attendeeName)).setText(msg.getData().getString("attendeeName"));
+						}
+						findViewById(R.id.attendeeName).setEnabled(false);
+						if (msg.getData().containsKey("eventName")) {
+							((EditText) findViewById(R.id.eventName)).setText(msg.getData().getString("eventName"));
+						}
+						findViewById(R.id.eventName).setEnabled(false);
+						setStatusText("Started");
 					} else {
-							isStarted = false;
-							setStatusText("Stopped");
+						isStarted = false;
+						setStatusText("Stopped");
+						if (msg.getData().containsKey("attendeeName")) {
+							((EditText) findViewById(R.id.attendeeName)).setText(msg.getData().getString("attendeeName"));
+						}
+						findViewById(R.id.attendeeName).setEnabled(true);
+						if (msg.getData().containsKey("eventName")) {
+							((EditText) findViewById(R.id.eventName)).setText(msg.getData().getString("eventName"));
+						}
+						findViewById(R.id.eventName).setEnabled(true);
 					}
 					break;
 				case TrackerService.MSG_REGISTER_CLIENT_RESPONSE:

@@ -33,7 +33,7 @@ import javax.xml.parsers.SAXParserFactory;
 public class TrackerService extends Service  implements
 		GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, LocationListener {
 	/* post data */
-	private String attendeeName = "byako";
+	private String attendeeName = "anonymous";
 	private String eventName = "efar15";
 	private String serverURL = "http://byako.org/google_map/new_data.php";
 
@@ -69,6 +69,7 @@ public class TrackerService extends Service  implements
 	static final int MSG_GPS_ENABLED = 6;
 	static final int MSG_GPS_DISABLED = 7;
 	static final int MSG_STOP_GPS_POLLING = 8;
+	static final int MSG_SET_DATA = 9;
 
 	class IncomingHandler extends Handler {
 		@Override
@@ -84,7 +85,12 @@ public class TrackerService extends Service  implements
 						replyTo = null;
 						break;
 					case MSG_SERVICE_STATUS_REQUEST:
-						replyTo.send(Message.obtain(null, MSG_SERVICE_STATUS_RESPONSE, isStarted ? 1 : 0, 0));
+						Message rmsg = Message.obtain(null, MSG_SERVICE_STATUS_RESPONSE, isStarted ? 1 : 0, 0);
+						Bundle bndl = new Bundle();
+						bndl.putString("attendeeName", attendeeName);
+						bndl.putString("eventName", eventName);
+						rmsg.setData(bndl);
+						replyTo.send(rmsg);
 						break;
 					case MSG_STOP_GPS_POLLING:
 						stopGPSPolling();
@@ -97,6 +103,10 @@ public class TrackerService extends Service  implements
 								Log.i("TrackerServiceHandler", "Failed to send MSG_SERVICE_STATUS_RESPONSE:" + e);
 							}
 						}
+						break;
+					case MSG_SET_DATA:
+						eventName = msg.getData().getString("eventName");
+						attendeeName = msg.getData().getString("attendeeName");
 						break;
 					default:
 						Log.i("TrackerServiceHandler", "Service got unknown message:" + msg.what);
@@ -247,7 +257,7 @@ public class TrackerService extends Service  implements
 
 	private void stopGPSPolling() {
 		tsLog("stoping GPS polling");
-		if (gpsWakeLock != null) {
+		if (gpsWakeLock != null && gpsWakeLock.isHeld()) {
 			gpsWakeLock.release();
 		}
 		if (mGoogleApiClient.isConnected()) {
