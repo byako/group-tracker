@@ -106,8 +106,6 @@ public class MainActivity extends Activity {
 	public void onStartStopButtonClicked(View v) {
 		//((TextView)findViewById(R.id.statusViewId)).setText("Started");
 		if (!isStarted) {
-			// TODO: send message to serevice to start polling
-
 			attendeeName = ((EditText)findViewById(R.id.attendeeName)).getText().toString();
 			eventName = ((EditText)findViewById(R.id.eventName)).getText().toString();
 
@@ -126,11 +124,6 @@ public class MainActivity extends Activity {
 			}
 			startService(new Intent(this, TrackerService.class));
 		} else {
-			// TODO: send message to service to stop polling
-//			findViewById(R.id.attendeeName).setEnabled(true);
-//			findViewById(R.id.eventName).setEnabled(true);
-
-			// TODO: move status change to handler
 			if (!isStarted)
 				maLog("STOPPING NON-RUNNIGN SERVICE");
 			try {

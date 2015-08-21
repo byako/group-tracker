@@ -26,6 +26,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
@@ -50,7 +52,6 @@ public class TrackerService extends Service  implements
 
 	/* GPS -related vars */
 	private GoogleApiClient mGoogleApiClient;
-	private Location mLastLocation;
 	private boolean isStarted;
 	private Location mCurrentLocation;
 	private boolean isConnected;
@@ -59,6 +60,8 @@ public class TrackerService extends Service  implements
 	private Messenger replyTo;
 	final Handler hdlr = new IncomingHandler();
 	final Messenger msgr = new Messenger(hdlr);
+
+	private Timer tt = null;
 
 	static final int MSG_REGISTER_CLIENT_COMMAND = 0;
 	static final int MSG_REGISTER_CLIENT_RESPONSE = 1;
@@ -70,6 +73,21 @@ public class TrackerService extends Service  implements
 	static final int MSG_GPS_DISABLED = 7;
 	static final int MSG_STOP_GPS_POLLING = 8;
 	static final int MSG_SET_DATA = 9;
+
+	class mUploadLocation extends TimerTask {
+		@Override
+		public void run() {
+			if (mCurrentLocation == null)
+				return;
+			Bundle pack = new Bundle();
+			pack.putDouble("latitude", mCurrentLocation.getLatitude());
+			pack.putDouble("longitude", mCurrentLocation.getLongitude());
+			pack.putString("attendeeName", attendeeName);
+			Log.i("TrackerServiceHandler","Uploading data");
+			Uploader u = new Uploader();
+			u.execute(pack);
+		}
+	};
 
 	class IncomingHandler extends Handler {
 		@Override
@@ -119,9 +137,8 @@ public class TrackerService extends Service  implements
 
 	@Override
 	public void onConnected(Bundle connectionHint) {
-		mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-		sendLocationToActivity(mLastLocation);
-		uploadLocation(mLastLocation);
+		mCurrentLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+		sendLocationToActivity(mCurrentLocation);
 		LocationRequest mLocationRequest = new LocationRequest();
 		mLocationRequest.setInterval(10000);
 		mLocationRequest.setFastestInterval(5000);
@@ -231,8 +248,6 @@ public class TrackerService extends Service  implements
 		mCurrentLocation = location;
 
 		sendLocationToActivity(mCurrentLocation);
-//		mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
-		uploadLocation(mCurrentLocation);
 	}
 
 	private void sendLocationToActivity(Location location) {
@@ -252,6 +267,8 @@ public class TrackerService extends Service  implements
 
 	private void startGPSPolling() {
 		tsLog("starting GPS polling");
+		tt = new Timer();
+		tt.scheduleAtFixedRate(new mUploadLocation(), 30000, 60000);
 		mGoogleApiClient.connect();
 	}
 
@@ -265,17 +282,13 @@ public class TrackerService extends Service  implements
 					mGoogleApiClient, this);
 			mGoogleApiClient.disconnect();
 		}
+		if (tt != null) {
+			tt.cancel();
+		}
 	}
 
-	private void uploadLocation(Location location) {
-		Bundle pack = new Bundle();
-		pack.putDouble("latitude", location.getLatitude());
-		pack.putDouble("longitude", location.getLongitude());
-		pack.putString("attendeeName", attendeeName);
 
-		Uploader u = new Uploader();
-		u.execute(pack);
-	}
+
 
 
 	class Uploader extends AsyncTask<Bundle, Void, Void> {
